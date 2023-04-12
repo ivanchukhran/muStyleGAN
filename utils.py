@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from scipy.stats import truncnorm
+
 
 def get_noise(shape: tuple, device='cuda') -> torch.Tensor:
     """
@@ -13,7 +15,19 @@ def get_noise(shape: tuple, device='cuda') -> torch.Tensor:
     return torch.randn(shape, device=device)
 
 
-def upsample(smaller_image, larger_image, interp_mode='bilinear'):
+def get_truncated_noise(n_samples: int, z_dim: int, truncation: float) -> torch.Tensor:
+    """
+    Generate a truncated noise tensor with the given channels.
+    :param n_samples: The number of samples to generate.
+    :param z_dim: The dimensionality of the noise vector.
+    :param truncation: The truncation factor to use.
+    :return: noise: Tensor - The generated noise.
+    """
+    values = truncnorm.rvs(-truncation, truncation, size=(n_samples, z_dim))
+    return torch.Tensor(values)
+
+
+def upsample(smaller_image: torch.Tensor, larger_image: torch.Tensor, interp_mode='bilinear'):
     """
     Upsample the smaller image to match the size of the larger image.
     :param smaller_image: Tensor - The smaller image.
