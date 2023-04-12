@@ -35,4 +35,4 @@ def upsample(smaller_image: torch.Tensor, larger_image: torch.Tensor, interp_mod
     :param interp_mode: The interpolation mode to use for upsampling.
     :return: upsampled_image: Tensor - The upsampled image.
     """
-    return F.interpolate(smaller_image, size=larger_image.shape[2:], mode=interp_mode)
+    return F.interpolate(smaller_image, size=larger_image.shape[-2:], mode=interp_mode)
