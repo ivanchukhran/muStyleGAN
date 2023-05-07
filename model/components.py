@@ -1,6 +1,7 @@
 from typing import Union, Optional
 
 import torch
+from scipy.stats import truncnorm
 from torch import nn
 from torch.nn import functional as F
 
@@ -10,21 +11,21 @@ from utils import get_noise, upsample
 class NoiseInjection(nn.Module):
     def __init__(self, channels):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros(1, channels, 1, 1))
+        self.weight = nn.Parameter(torch.randn((1, channels, 1, 1)))
 
-    def forward(self, image):
+    def forward(self, image) -> torch.Tensor:
         noise_shape = (image.shape[0], 1, image.shape[2], image.shape[3])
         return image + self.weight * get_noise(noise_shape, device=image.device)
-
-    @property
-    def weight(self) -> nn.Parameter:
-        return self.weight
 
     def get_self(self) -> "NoiseInjection":
         return self
 
+    @property
+    def get_weight(self) -> nn.Parameter:
+        return self.weight
 
-class muMappingLayers(nn.Module):
+
+class MappingLayers(nn.Module):
     def __init__(self, z_dim: int, hidden_dim: int, w_dim: int):
         super().__init__()
         self.map = nn.Sequential(
@@ -51,7 +52,7 @@ class AdaIN(nn.Module):
         self.scale = nn.Linear(w_dim, channels)
         self.shift = nn.Linear(w_dim, channels)
 
-    def forward(self, image, w):
+    def forward(self, image, w) -> torch.Tensor:
         normalized_image = self.instance_norm(image)
         style_scale = self.scale(w)[:, :, None, None]
         style_shift = self.shift(w)[:, :, None, None]
@@ -70,7 +71,7 @@ class AdaIN(nn.Module):
         return self
 
 
-class MuGeneratorBlock(nn.Module):
+class GeneratorBlock(nn.Module):
     """
     A micro generator block.
     :param in_channels: The number of channels in the input.
@@ -101,7 +102,7 @@ class MuGeneratorBlock(nn.Module):
         self.adain = AdaIN(out_channels, w_dim)
         self.activation = nn.LeakyReLU(negative_slope=relu_slope)
 
-    def forward(self, x, w):
+    def forward(self, x, w) -> torch.Tensor:
         if self.upsample_mode:
             x = self.upsample(x)
         x = self.conv(x)
@@ -110,7 +111,7 @@ class MuGeneratorBlock(nn.Module):
         return self.activation(x)
 
 
-class muGenerator(nn.Module):
+class Generator(nn.Module):
     def __init__(
             self,
             z_dim,
@@ -123,11 +124,11 @@ class muGenerator(nn.Module):
             interp_alpha: float = 0.2
     ):
         super().__init__()
-        self.mapping = muMappingLayers(z_dim=z_dim, hidden_dim=map_hidden_dim, w_dim=w_dim)
+        self.mapping = MappingLayers(z_dim=z_dim, hidden_dim=map_hidden_dim, w_dim=w_dim)
         self.starting_constant = nn.Parameter(torch.randn(1, hidden_chan, 4, 4))
-        self.block0 = MuGeneratorBlock(in_chan, hidden_chan, w_dim, kernel_size, 4, upsample_mode=None)
-        self.block1 = MuGeneratorBlock(hidden_chan, hidden_chan, w_dim, kernel_size, 8)
-        self.block2 = MuGeneratorBlock(hidden_chan, hidden_chan, w_dim, kernel_size, 16)
+        self.block0 = GeneratorBlock(in_chan, hidden_chan, w_dim, kernel_size, 4, upsample_mode=None)
+        self.block1 = GeneratorBlock(hidden_chan, hidden_chan, w_dim, kernel_size, 8)
+        self.block2 = GeneratorBlock(hidden_chan, hidden_chan, w_dim, kernel_size, 16)
 
         # (Note that this is simplified, with clipping used in the real StyleGAN)
         self.block1_to_image = nn.Conv2d(hidden_chan, out_chan, kernel_size=1)
@@ -145,3 +146,33 @@ class muGenerator(nn.Module):
         x_small_upsample = upsample(x_small_image, x_big_image)
         interpolation = torch.lerp(x_small_upsample, x_big_image, self.alpha)
         return interpolation, x_small_upsample, x_big_image if return_intermediate else interpolation
+
+
+class ModulatedConv2D(nn.Module):
+    def __init__(
+            self,
+            w_dim: Union[int, tuple],
+            in_channels: int,
+            out_channels: int,
+            kernel_size: int,
+            padding: int = 1,
+            eps: float = 1e-6
+    ):
+        super().__init__()
+        self.conv_weight = nn.Parameter(torch.randn(out_channels, in_channels, kernel_size, kernel_size))
+        self.style_scale_transform = nn.Linear(w_dim, out_channels)
+        self.eps = eps
+        self.padding = padding
+
+    def forward(self, x, w) -> torch.Tensor:
+        style_scale = self.style_scale_transform(w)
+        w_prime = self.conv_weight[None] * style_scale[:, None, :, None, None]
+        w_prime_prime = w_prime / torch.sqrt(
+            (w_prime ** 2).sum([2, 3, 4])[:, :, None, None, None] + self.eps
+        )
+        batch_size, in_channels, height, width = x.shape
+        out_channels = w_prime_prime.shape[2]
+        efficient_x = x.view(1, batch_size * in_channels, height, width)
+        efficient_filter = w_prime_prime.view(batch_size * out_channels, in_channels,  *w_prime_prime.shape[3:])
+        efficient_out = F.conv2d(efficient_x, efficient_filter, padding=self.padding, groups=batch_size)
+        return efficient_out.view(batch_size, out_channels, *x.shape[2:])
