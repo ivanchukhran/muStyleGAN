@@ -38,7 +38,7 @@ def upsample(smaller_image: torch.Tensor, larger_image: torch.Tensor, interp_mod
     return F.interpolate(smaller_image, size=larger_image.shape[-2:], mode=interp_mode)
 
 
-def get_gradient(critic, real_images: torch.Tensor, fake_images: torch.Tensor, lambda_: float) -> torch.Tensor:
+def get_gradient(critic, real_images: torch.Tensor, fake_images: torch.Tensor, lambda_: torch.Tensor) -> torch.Tensor:
     """
     Get the gradient of the critic's scores with respect to mixes of real and fake images.
     :param critic: The critic model.
@@ -60,7 +60,7 @@ def get_gradient(critic, real_images: torch.Tensor, fake_images: torch.Tensor, l
 
 
 def gradient_penalty(gradient) -> torch.Tensor:
-    '''
+    """
     Return the gradient penalty, given a gradient.
     Given a batch of image gradients, you calculate the magnitude of each image's gradient
     and penalize the mean quadratic distance of each magnitude to 1.
@@ -68,7 +68,7 @@ def gradient_penalty(gradient) -> torch.Tensor:
         gradient: the gradient of the critic's scores, with respect to the mixed image
     Returns:
         penalty: the gradient penalty
-    '''
+    """
     # Flatten the gradients so that each row captures one image
     gradient = gradient.view(len(gradient), -1)
     gradient_norm = gradient.norm(2, dim=1)
