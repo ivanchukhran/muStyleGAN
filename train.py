@@ -1,5 +1,7 @@
 from tqdm.auto import tqdm
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 from torch.optim import Optimizer, Adam
@@ -19,7 +21,6 @@ def epoch(
         loader: DataLoader,
         gen_opt: Adam,
         disc_opt: Adam,
-        loss_fn: NLLLoss,
         z_dim: int = 512,
         disc_repeats: int = 1,
         c_lambda: float = 10,
@@ -38,8 +39,7 @@ def epoch(
             disc_fake_pred = disc(fake.detach())
             disc_real_pred = disc(real)
 
-            epsilon = torch.rand(len(real), 1, 1, 1,
-                                 device=device, requires_grad=True)
+            epsilon = torch.rand(len(real), 1, 1, 1, device=device, requires_grad=True)
             gradient = get_gradient(disc, real, fake.detach(), epsilon)
             gp = gradient_penalty(gradient)
             crit_loss = critic_loss(
@@ -51,7 +51,7 @@ def epoch(
             crit_loss.backward(retain_graph=True)
             disc_opt.step()
 
-        # disc_losses += [mean_iteration_disc_loss]
+        disc_losses += [mean_iteration_disc_loss]
         gen_opt.zero_grad()
 
         fake_noise_2 = get_noise((batch_size, z_dim), device=device)
@@ -62,8 +62,9 @@ def epoch(
         gen_loss.backward()
         gen_opt.step()
 
-        return mean_iteration_disc_loss, gen_loss.item()
+        return np.mean(disc_losses), gen_loss.item()
 
-def train_loop(epochs):
+
+def train_loop(gen, disc, loader, gen_opt, disc_opt, z_dim, disc_repeats, epochs):
     for epoch in tqdm(range(epochs)):
-        pass
+        disc_loss, gen_loss = epoch(gen, disc, loader, gen_opt, disc_opt, z_dim, disc_repeats)

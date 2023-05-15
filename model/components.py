@@ -73,7 +73,7 @@ class AdaIN(nn.Module):
 
 class GeneratorBlock(nn.Module):
     """
-    A micro generator block.
+    A microgenerator block.
     :param in_channels: The number of channels in the input.
     :param out_channels: The number of channels in the output.
     :param w_dim: The dimension of the latent vector.
@@ -109,6 +109,36 @@ class GeneratorBlock(nn.Module):
         x = self.inject_noise(x)
         x = self.adain(x, w)
         return self.activation(x)
+
+
+class ModulatedConv2D(nn.Module):
+    def __init__(
+            self,
+            w_dim: Union[int, tuple],
+            in_channels: int,
+            out_channels: int,
+            kernel_size: int,
+            padding: int = 1,
+            eps: float = 1e-6
+    ):
+        super().__init__()
+        self.conv_weight = nn.Parameter(torch.randn(out_channels, in_channels, kernel_size, kernel_size))
+        self.style_scale_transform = nn.Linear(w_dim, out_channels)
+        self.eps = eps
+        self.padding = padding
+
+    def forward(self, x, w) -> torch.Tensor:
+        style_scale = self.style_scale_transform(w)
+        w_prime = self.conv_weight[None] * style_scale[:, None, :, None, None]
+        w_prime_prime = w_prime / torch.sqrt(
+            (w_prime ** 2).sum([2, 3, 4])[:, :, None, None, None] + self.eps
+        )
+        batch_size, in_channels, height, width = x.shape
+        out_channels = w_prime_prime.shape[2]
+        efficient_x = x.view(1, batch_size * in_channels, height, width)
+        efficient_filter = w_prime_prime.view(batch_size * out_channels, in_channels, *w_prime_prime.shape[3:])
+        efficient_out = F.conv2d(efficient_x, efficient_filter, padding=self.padding, groups=batch_size)
+        return efficient_out.view(batch_size, out_channels, *x.shape[2:])
 
 
 class Generator(nn.Module):
@@ -148,31 +178,35 @@ class Generator(nn.Module):
         return interpolation, x_small_upsample, x_big_image if return_intermediate else interpolation
 
 
-class ModulatedConv2D(nn.Module):
-    def __init__(
-            self,
-            w_dim: Union[int, tuple],
-            in_channels: int,
-            out_channels: int,
-            kernel_size: int,
-            padding: int = 1,
-            eps: float = 1e-6
-    ):
+class CriticBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, relu_slope):
         super().__init__()
-        self.conv_weight = nn.Parameter(torch.randn(out_channels, in_channels, kernel_size, kernel_size))
-        self.style_scale_transform = nn.Linear(w_dim, out_channels)
-        self.eps = eps
-        self.padding = padding
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
+        self.activation = nn.LeakyReLU(negative_slope=relu_slope)
+        self.norm = nn.BatchNorm2d(out_channels)
 
-    def forward(self, x, w) -> torch.Tensor:
-        style_scale = self.style_scale_transform(w)
-        w_prime = self.conv_weight[None] * style_scale[:, None, :, None, None]
-        w_prime_prime = w_prime / torch.sqrt(
-            (w_prime ** 2).sum([2, 3, 4])[:, :, None, None, None] + self.eps
-        )
-        batch_size, in_channels, height, width = x.shape
-        out_channels = w_prime_prime.shape[2]
-        efficient_x = x.view(1, batch_size * in_channels, height, width)
-        efficient_filter = w_prime_prime.view(batch_size * out_channels, in_channels,  *w_prime_prime.shape[3:])
-        efficient_out = F.conv2d(efficient_x, efficient_filter, padding=self.padding, groups=batch_size)
-        return efficient_out.view(batch_size, out_channels, *x.shape[2:])
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        return x
+
+
+class CriticEpilogue(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+
+class Critic(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+
+
+    def forward(self, x):
+        pass
