@@ -1,10 +1,10 @@
 from model.components import *
-from utils import get_truncated_noise
+from utils import truncated_noise
 
 
 def test_truncation():
-    assert tuple(get_truncated_noise(n_samples=10, z_dim=5, truncation=0.7).shape) == (10, 5)
-    simple_noise = get_truncated_noise(n_samples=1000, z_dim=10, truncation=0.2)
+    assert tuple(truncated_noise(n_samples=10, z_dim=5, truncation=0.7).shape) == (10, 5)
+    simple_noise = truncated_noise(n_samples=1000, z_dim=10, truncation=0.2)
     assert 0.199 < simple_noise.max() < 2
     assert -0.199 > simple_noise.min() > -0.2
     assert 0.113 < simple_noise.std() < 0.117
