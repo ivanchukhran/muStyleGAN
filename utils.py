@@ -3,6 +3,21 @@ from torch import nn
 from torch.nn import functional as F
 
 from scipy.stats import truncnorm
+from torchvision.utils import make_grid
+import matplotlib.pyplot as plt
+
+
+def show_tensor_images(image_tensor, num_images=16, size=(3, 64, 64), nrow=3):
+    """
+    Function for visualizing images: Given a tensor of images, number of images,
+    size per image, and images per row, plots and prints the images in an uniform grid.
+    """
+    image_tensor = (image_tensor + 1) / 2
+    image_unflat = image_tensor.detach().cpu().clamp_(0, 1)
+    image_grid = make_grid(image_unflat[:num_images], nrow=nrow, padding=0)
+    plt.imshow(image_grid.permute(1, 2, 0).squeeze())
+    plt.axis('off')
+    plt.show()
 
 
 def get_noise(shape: tuple, device='cuda') -> torch.Tensor:
@@ -15,7 +30,7 @@ def get_noise(shape: tuple, device='cuda') -> torch.Tensor:
     return torch.randn(shape, device=device)
 
 
-def get_truncated_noise(n_samples: int, z_dim: int, truncation: float) -> torch.Tensor:
+def truncated_noise(n_samples: int, z_dim: int, truncation: float) -> torch.Tensor:
     """
     Generate a truncated noise tensor with the given channels.
     :param n_samples: The number of samples to generate.
@@ -38,7 +53,7 @@ def upsample(smaller_image: torch.Tensor, larger_image: torch.Tensor, interp_mod
     return F.interpolate(smaller_image, size=larger_image.shape[-2:], mode=interp_mode)
 
 
-def get_gradient(critic, real_images: torch.Tensor, fake_images: torch.Tensor, lambda_: torch.Tensor) -> torch.Tensor:
+def gradient_of(critic, real_images: torch.Tensor, fake_images: torch.Tensor, lambda_: torch.Tensor) -> torch.Tensor:
     """
     Get the gradient of the critic's scores with respect to mixes of real and fake images.
     :param critic: The critic model.
