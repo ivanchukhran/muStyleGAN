@@ -201,12 +201,27 @@ class CriticEpilogue(nn.Module):
         return self.conv(x)
 
 
-
 class Critic(nn.Module):
-    def __init__(self):
+    def __init__(
+            self, # TODO: Fil in
+    ):
         super().__init__()
-
-
+        self.blocks = nn.Sequential() # TODO: Fill in
 
     def forward(self, x):
         pass
+
+
+# decide whether to use this method or not.
+    def make_block(
+            self,
+            in_channels: int,
+            out_channels: int,
+            kernel_size: Union[int, tuple],
+            stride: int,
+            padding: int,
+            relu_slope,
+            is_last: bool = False
+    ):
+        return (CriticEpilogue(in_channels, out_channels, kernel_size, stride, padding) if is_last else
+                CriticBlock(in_channels, out_channels, kernel_size, stride, padding, relu_slope))
