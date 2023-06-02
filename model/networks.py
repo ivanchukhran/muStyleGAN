@@ -1,12 +1,11 @@
-from typing import Union, Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 import torch
-from scipy.stats import truncnorm
 from torch import nn
 from torch.nn import functional as F
 
-from utils import get_noise, upsample
+from utils import get_noise
 
 
 class NoiseInjection(nn.Module):
@@ -271,8 +270,6 @@ class Downsample(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.smooth(x)
         return F.interpolate(x, (x.shape[2] // self.factor, x.shape[3] // self.factor), mode=self.mode)
-
-
 
 
 class EqualizedConv2D(nn.Module):
