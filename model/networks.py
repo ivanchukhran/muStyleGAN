@@ -351,3 +351,43 @@ class Discriminator(nn.Module):
         x = x.reshape(x.shape[0], -1)
         x = self.final(x)
         return x
+
+
+class GradientPenalty(nn.Module):
+    def forward(self, x: torch.Tensor, d: torch.Tensor) -> torch.Tensor:
+        batch_size = x.shape[0]
+        gradients, *_ = torch.autograd.grad(
+            outputs=d, inputs=x,
+            grad_outputs=d.new_ones(d.shape),
+            create_graph=True
+        )
+        gradients = gradients.reshape(batch_size, -1)
+        norm = gradients.norm(2, dim=1)
+        return torch.mean(norm ** 2)
+
+
+class PathLengthPenalty(nn.Module):
+    def __init__(self, beta: float) -> None:
+        super().__init__()
+        self.beta = beta
+        self.steps = nn.Parameter(torch.tensor(0.0), requires_grad=False)
+        self.exp_sum_a = nn.Parameter(torch.tensor(0.0), requires_grad=False)
+
+    def forward(self, w: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        device = x.device
+        image_size = x.shape[2] * x.shape[3]
+        y = torch.randn(x.shape, device=device)
+        output = (x * y).sum() / np.sqrt(image_size)
+        gradients, *_ = torch.autograd.grad(outputs=output, inputs=w,
+                                            grad_outputs=torch.ones(output.shape, device=device),
+                                            create_graph=True)
+        norm = (gradients ** 2).sum(dim=2).mean(dim=1).sqrt()
+        if self.steps > 0:
+            a = self.exp_sum_a / (1 - self.beta ** self.steps)
+            loss = torch.mean((norm - a) ** 2)
+        else:
+            loss = norm.new_tensor(0)
+        mean = norm.mean().detach()
+        self.exp_sum_a.mul_(self.beta).add_(mean, alpha=1 - self.beta)
+        self.steps.add_(1.)
+        return loss
