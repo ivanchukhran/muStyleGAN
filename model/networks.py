@@ -82,6 +82,22 @@ class AdaIN(nn.Module):
         return self
 
 
+class Generator(nn.Module):
+    def __init__(self,
+                 z_dim: int,
+                 w_dim: int,
+                 n_mapping_layers: int,
+                 image_resolution: int,
+                 ) -> None:
+        super().__init__()
+        self.mapping_network = MappingNetwork(z_dim, w_dim, n_mapping_layers)
+        self.synthesis_network = SynthesisNetwork(image_resolution, w_dim)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        w = self.mapping_network(z)
+        return self.synthesis_network(w)
+
+
 class EqualizedWeight(nn.Module):
     def __init__(self, shape: tuple) -> None:
         super().__init__()
@@ -163,11 +179,11 @@ class SynthesisBlock(nn.Module):
 
 
 class SynthesisNetwork(nn.Module):
-    def __init__(self, resolution: int, w_dim: int, max_features: int = 512):
+    def __init__(self, resolution: int, w_dim: int, n_features: int = 32, max_features: int = 512):
         super().__init__()
         log_resolution = int(np.log2(resolution))
-        self.n_blocks = log_resolution
-        features = [min(resolution * 2 ** i, max_features) for i in range(log_resolution - 2, -1, -1)]
+        features = [min(n_features * 2 ** i, max_features) for i in range(log_resolution - 2, -1, -1)]
+        self.n_blocks = len(features)
 
         self.initial_constant = nn.Parameter(torch.randn(1, features[0], 4, 4))
         self.style_block = SynthesisLayer(w_dim, features[0], features[0])
@@ -226,25 +242,25 @@ class Smooth(nn.Module):
     def __init__(self, eps: float = 1e-6) -> None:
         super().__init__()
         self.eps = eps
-        kernel = torch.tensor([[1, 2, 1], [2, 4, 2], [1, 2, 1]], dtype=torch.float)
+        kernel = torch.tensor([[[[1, 2, 1], [2, 4, 2], [1, 2, 1]]]], dtype=torch.float)
         kernel /= kernel.sum()
         self.kernel = nn.Parameter(kernel, requires_grad=False)
         self.pad = nn.ReflectionPad2d(1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, h, w = x.shape
-        x = x.view(-1, -1, h, w)
+        x = x.view(-1, 1, h, w)
         x = self.pad(x)
         x = F.conv2d(x, self.kernel)
         return x.view(b, c, h, w)
 
 
 class Upsample(nn.Module):
-    def __init__(self, factor: int = 2, mode: str = "nearest") -> None:
+    def __init__(self, factor: int = 2, mode: str = "nearest-exact") -> None:
         super().__init__()
         match mode:
-            case "nearest":
-                self.upsample = nn.Upsample(scale_factor=factor, mode="nearest", align_corners=False)
+            case "nearest-exact":
+                self.upsample = nn.Upsample(scale_factor=factor, mode="nearest-exact")
             case "bilinear":
                 self.upsample = nn.Upsample(scale_factor=factor, mode="bilinear", align_corners=False)
             case _:
@@ -257,10 +273,10 @@ class Upsample(nn.Module):
 
 
 class Downsample(nn.Module):
-    def __init__(self, factor: int = 2, mode: str = "nearest") -> None:
+    def __init__(self, factor: int = 2, mode: str = "nearest-exact") -> None:
         super().__init__()
         match mode:
-            case "nearest" | "bilinear":
+            case "nearest-exact" | "bilinear":
                 self.mode = mode
             case _:
                 raise ValueError(f"Unknown mode {mode}")
@@ -302,6 +318,7 @@ class DiscriminatorBlock(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         residual = self.residual(x)
         x = self.block(x)
+        x = self.downsample(x)
         x = (x + residual) * self.scale
         return x
 
@@ -324,7 +341,7 @@ class MiniBatchStdDev(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, resolution: int, n_features: int = 64, max_features: int = 512) -> None:
+    def __init__(self, resolution: int, n_features: int = 32, max_features: int = 512) -> None:
         super().__init__()
         self.from_rgb = nn.Sequential(
             EqualizedConv2D(3, n_features, kernel_size=1),
