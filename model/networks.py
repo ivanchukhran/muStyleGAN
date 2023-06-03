@@ -330,8 +330,6 @@ class MiniBatchStdDev(nn.Module):
         self.epsilon = eps
 
     def forward(self, x) -> torch.Tensor:
-        if x.shape[0] % self.group_size != 0:
-            raise ValueError(f"Batch size must be a multiple of {self.group_size}")
         grouped = x.reshape(self.group_size, -1)
         std = torch.sqrt(grouped.var(dim=0) + self.epsilon)
         std = std.mean().view(1, 1, 1, 1)
