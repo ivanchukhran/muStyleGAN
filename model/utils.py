@@ -42,17 +42,6 @@ def truncated_noise(n_samples: int, z_dim: int, truncation: float) -> torch.Tens
     return torch.Tensor(values)
 
 
-def upsample(smaller_image: torch.Tensor, larger_image: torch.Tensor, interp_mode='bilinear'):
-    """
-    Upsample the smaller image to match the size of the larger image.
-    :param smaller_image: Tensor - The smaller image.
-    :param larger_image: Tensor - The larger image.
-    :param interp_mode: The interpolation mode to use for upsampling.
-    :return: upsampled_image: Tensor - The upsampled image.
-    """
-    return F.interpolate(smaller_image, size=larger_image.shape[-2:], mode=interp_mode)
-
-
 def gradient_of(critic, real_images: torch.Tensor, fake_images: torch.Tensor, lambda_: torch.Tensor) -> torch.Tensor:
     """
     Get the gradient of the critic's scores with respect to mixes of real and fake images.
