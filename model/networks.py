@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from utils import get_noise
+from model.utils import get_noise
 
 
 class NoiseInjection(nn.Module):
@@ -92,6 +92,14 @@ class Generator(nn.Module):
         super().__init__()
         self.mapping_network = MappingNetwork(z_dim, w_dim, n_mapping_layers)
         self.synthesis_network = SynthesisNetwork(image_resolution, w_dim)
+
+    @property
+    def mapping(self) -> "MappingNetwork":
+        return self.mapping_network
+
+    @property
+    def synthesis(self) -> "SynthesisNetwork":
+        return self.synthesis_network
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         w = self.mapping_network(z)
