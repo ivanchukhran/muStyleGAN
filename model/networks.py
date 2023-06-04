@@ -377,6 +377,9 @@ class Discriminator(nn.Module):
 
 
 class GradientPenalty(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+
     def forward(self, x: torch.Tensor, d: torch.Tensor) -> torch.Tensor:
         batch_size = x.shape[0]
         gradients, *_ = torch.autograd.grad(
