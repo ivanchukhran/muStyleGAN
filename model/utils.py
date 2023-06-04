@@ -7,14 +7,14 @@ from torchvision.utils import make_grid
 import matplotlib.pyplot as plt
 
 
-def show_tensor_images(image_tensor, num_images=16, size=(3, 64, 64), nrow=3):
+def show_tensor_images(image_tensor, num_images=16):
     """
     Function for visualizing images: Given a tensor of images, number of images,
     size per image, and images per row, plots and prints the images in an uniform grid.
     """
     image_tensor = (image_tensor + 1) / 2
-    image_unflat = image_tensor.detach().cpu().clamp_(0, 1)
-    image_grid = make_grid(image_unflat[:num_images], nrow=nrow, padding=0)
+    image_unflatten = image_tensor.detach().cpu().clamp_(0, 1)
+    image_grid = make_grid(image_unflatten[:num_images], padding=0)
     plt.imshow(image_grid.permute(1, 2, 0).squeeze())
     plt.axis('off')
     plt.show()
@@ -57,13 +57,12 @@ def gradient_of(critic, real_images: torch.Tensor, fake_images: torch.Tensor, la
         inputs=mixed_images,
         outputs=mixed_scores,
         grad_outputs=torch.ones_like(mixed_scores),
-        create_graph=True,
-        retain_graph=True,
+        create_graph=True
     )[0]
     return gradient
 
 
-def gradient_penalty(gradient) -> torch.Tensor:
+def gradient_penalty(x: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
     """
     Return the gradient penalty, given a gradient.
     Given a batch of image gradients, you calculate the magnitude of each image's gradient
@@ -73,11 +72,15 @@ def gradient_penalty(gradient) -> torch.Tensor:
     Returns:
         penalty: the gradient penalty
     """
-    # Flatten the gradients so that each row captures one image
-    gradient = gradient.view(len(gradient), -1)
-    gradient_norm = gradient.norm(2, dim=1)
-    penalty = torch.mean((gradient_norm - 1) ** 2)
-    return penalty
+    batch_size = x.shape[0]
+    gradients, *_ = torch.autograd.grad(outputs=f,
+                                        inputs=x,
+                                        grad_outputs=f.new_ones(f.shape),
+                                        create_graph=True,
+                                        allow_unused=True)
+    gradients = gradients.reshape(batch_size, -1)
+    norm = gradients.norm(2, dim=-1)
+    return torch.mean((norm - 1) ** 2)
 
 
 def generator_loss(fake_scores: torch.Tensor) -> torch.Tensor:
@@ -89,16 +92,12 @@ def generator_loss(fake_scores: torch.Tensor) -> torch.Tensor:
     return -torch.mean(fake_scores)
 
 
-def critic_loss(real_scores: torch.Tensor,
-                fake_scores: torch.Tensor,
-                gradient_penalty: torch.Tensor,
-                penalty_weight: float) -> torch.Tensor:
+def discriminator_loss(real_scores: torch.Tensor,
+                       fake_scores: torch.Tensor) -> torch.Tensor:
     """
     Calculate the critic loss given real and fake scores, and the gradient penalty.
     :param real_scores: Tensor - The real scores.
     :param fake_scores: Tensor - The fake scores.
-    :param gradient_penalty: Tensor - The gradient penalty.
-    :param penalty_weight: float - The weight to apply to the gradient penalty.
     :return: loss: Tensor - The critic loss.
     """
-    return torch.mean(fake_scores) - torch.mean(real_scores) + gradient_penalty * penalty_weight
+    return F.relu((1 - real_scores).mean()) + F.relu((1 + fake_scores).mean())
