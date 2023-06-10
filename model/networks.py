@@ -101,6 +101,11 @@ class Generator(nn.Module):
     def synthesis(self) -> "SynthesisNetwork":
         return self.synthesis_network
 
+    def from_pretrained(self, path: str) -> "Generator":
+        state_dict = torch.load(path)
+        self.load_state_dict(state_dict)
+        return self
+
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         w = self.mapping_network(z)
         return self.synthesis_network(w)
