@@ -1,4 +1,4 @@
-# $\mu$StyleGAN
+# $`\mu`$StyleGAN
 
 A simplified version of StyleGAN/StyleGAN 2. The main purpose is to implement a smaller version of the GAN for forum presentation. 
 
