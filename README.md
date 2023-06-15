@@ -24,3 +24,9 @@ A simplified version of StyleGAN/StyleGAN 2. The main purpose is to implement a 
 | :--: |
 | Image 2 - training results per epochs: 1200 epochs (a), 1500(b), 3200(c), 3500(c), 4200(e)|
 
+
+## Generated and original images comparison
+
+|![Comparison](images/comparison.jpg)|
+|:--:|
+|Image 3 - Comparison of zoomed generated (left) and real (right) images|
