@@ -6,6 +6,23 @@ from scipy.stats import truncnorm
 from torchvision.utils import make_grid
 import matplotlib.pyplot as plt
 
+import json
+
+
+def read_settings(path: str) -> dict:
+    """
+    Read the settings from the given path.
+    :param path: The path to the settings file.
+    :return: settings: dict - The settings.
+    """
+    try:
+        with open(path, 'r') as f:
+            settings = json.load(f)
+    except Exception as e:
+        print(f"Error reading settings file: {e}")
+        settings = {}
+    return settings
+
 
 def show_tensor_images(image_tensor, num_images=16):
     """
