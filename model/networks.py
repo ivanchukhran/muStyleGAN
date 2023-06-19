@@ -110,6 +110,10 @@ class Generator(nn.Module):
         w = self.mapping_network(z)
         return self.synthesis_network(w)
 
+    @torch.no_grad()
+    def generate(self, z: torch.Tensor) -> torch.Tensor:
+        return self.forward(z)
+
 
 class EqualizedWeight(nn.Module):
     def __init__(self, shape: tuple) -> None:
