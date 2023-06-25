@@ -1,5 +1,6 @@
 from typing import Tuple
 
+import PIL.Image
 import numpy as np
 import torch
 from torch import nn
@@ -110,8 +111,22 @@ class Generator(nn.Module):
         w = self.mapping_network(z)
         return self.synthesis_network(w)
 
+    def generate(
+            self,
+            num_images: int,
+            to_image: bool = True,
+            device: str = "cpu"
+    ) -> torch.Tensor | PIL.Image.Image | list[PIL.Image.Image]:
+        z = get_noise((num_images, self.z_dim), device=device)
+        generated_images = self._generate(z)
+        if not to_image:
+            return generated_images
+        if num_images == 1:
+            return self._to_image(torch.squeeze(generated_images))
+        return [self._to_image(image) for image in generated_images]
+
     @torch.no_grad()
-    def generate(self, z: torch.Tensor) -> torch.Tensor:
+    def _generate(self, z: torch.Tensor) -> torch.Tensor:
         return self.forward(z)
 
 
