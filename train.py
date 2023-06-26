@@ -1,13 +1,14 @@
+import datetime
+import os
 from typing import Optional
 
-import torchvision.transforms as transforms
 from torch.optim import Optimizer, Adam
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from model.networks import Generator, Discriminator
 from model.utils import *
-from process_data import create_dir, Dataset
+from process_data import *
 
 
 def train_loop(
@@ -50,10 +51,11 @@ def train_loop(
                 disc_fake_pred = discriminator(fake.detach())
                 disc_real_pred = discriminator(real)
 
-                epsilon = torch.rand(len(real), 1, 1, 1, device=device, requires_grad=True)
+                # epsilon = torch.rand(len(real), 1, 1, 1, device=device, requires_grad=True)
                 # gradient = gradient_of(discriminator, real, fake.detach(), epsilon)
 
                 disc_loss = discriminator_loss(disc_real_pred, disc_fake_pred)
+                # print(f"disc_loss: {disc_loss.shape}")
                 if cur_step % lazy_gradient_penalty == 0:
                     gp = gradient_penalty(real, disc_real_pred)
                     disc_loss += gp * c_lambda
@@ -78,8 +80,8 @@ def train_loop(
             generator_losses += [gen_loss.item()]
 
             if cur_step % save_step == 0 and cur_step > 0:
-                torch.save(generator.state_dict(), f"{save_dir}/generator_{cur_step}.pth")
-                torch.save(discriminator.state_dict(), f"{save_dir}/discriminator_{cur_step}.pth")
+                torch.save(generator.state_dict(), f"{save_dir}/generator_{epoch}.pth")
+                torch.save(discriminator.state_dict(), f"{save_dir}/discriminator_{epoch}.pth")
 
             # Visualization code
             if display_step:
@@ -101,9 +103,11 @@ def train_loop(
                         torch.Tensor(critic_losses[:num_examples]).view(-1, step_bins).mean(1),
                         label="Discriminator Loss"
                     )
+                    # print(f"Gen losses: {len(generator_losses)}, Critic losses: {len(critic_losses)}")
+                    # plt.plot(generator_losses, label=f"Generator Loss")
+                    # plt.plot(critic_losses, label=f"Discriminator Loss")
                     plt.legend()
                     plt.show()
-
             cur_step += 1
 
 
@@ -125,14 +129,23 @@ def train(epochs: int, dry_run: bool = False, kaggle_mode: bool = False):
     discriminator_lr = 2e-5
     discriminator_betas = (0.5, 0.9)
 
-    save_step = 500
-    save_path = "weights/"
-    create_dir(save_path)
-
     c_lambda = 10
     crit_repeats = 5
     n_epochs = epochs
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    save_step = 500
+    formatted_date = datetime.datetime.now().strftime("%d%m%y")
+    save_path = f"weights"
+
+    if similar_dir_exists(save_path, formatted_date):
+        save_path = f"{save_path}/" \
+                    f"{formatted_date}" \
+                    f"v{len([folder for folder in os.listdir('weights') if formatted_date in folder]) + 1}"
+    else:
+        save_path = f"{save_path}/{formatted_date}v1"
+
+    create_dir(save_path)
 
     dataset_path = "data/landscapes" if not kaggle_mode else "../input/landscapes/landscapes"  # Need to be changed
     dataset = Dataset(dataset_path)
