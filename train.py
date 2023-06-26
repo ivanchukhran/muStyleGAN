@@ -17,7 +17,7 @@ def train_loop(
         gen_optimizer: Optimizer,
         disc_optimizer: Optimizer,
         z_dim: int,
-        save_step: int = 500,
+        save_step: int = 506,
         save_dir: str = "weights",
         crit_repeats: int = 1,
         n_epochs: int = 1000,
@@ -116,9 +116,9 @@ def train_loop(
                                               '`local` will run the training locally, '
                                               '`kaggle` supposed to run on Kaggle.com platform')
 @click.option('--resolution', default=32, help='Resolution of the images to train on. 32 is the default.')
-@click.option('--display-step', default=500, help='Number of steps to display the images for. The 500 is the default.'
+@click.option('--display-step', default=506, help='Number of steps to display the images for. The 506 is the default.'
                                                   'If none is given, it will not display the images.')
-@click.option('--save-step', default=500, help='Number of steps to save the images for. 500 is the default.')
+@click.option('--save-step', default=506, help='Number of steps to save the images for. 506 is the default.')
 @click.option('--batch-size', default=8, help='Batch size to use for training. 8 is the default.')
 @click.option('--dry-run', default=False, help='Whether to do a dry run of the training. False is the default.')
 @click.option('--plot-dir', default=None, help='Directory to save the plots in. '
@@ -128,15 +128,15 @@ def train_loop(
                                                  'None is the default. '
                                                  'If none is given, it will not save the samples.')
 def train(
-        num_epochs: int = 100_000,
-        mode: str = "local",
-        resolution: int = 32,
-        display_step: int = 500,
-        save_step: int = 500,
-        batch_size: int = 8,
-        dry_run: bool = False,
-        plot_dir: Optional[str] = None,
-        sample_dir: Optional[str] = None
+        num_epochs: int,
+        mode: str,
+        resolution: int,
+        display_step: int,
+        save_step: int,
+        batch_size: int,
+        dry_run: bool,
+        plot_dir: Optional[str],
+        sample_dir: Optional[str]
 ) -> None:
     z_dim = 128
     w_dim = 256
@@ -183,7 +183,7 @@ def train(
         case _:
             raise ValueError(f"Unknown mode: {mode}")
 
-    dataset = Dataset(dataset_path)
+    dataset = Dataset(dataset_path, crop_size=resolution)
 
     dataloader = DataLoader(
         dataset,
@@ -197,7 +197,7 @@ def train(
         image_resolution=resolution,
         n_mapping_layers=n_mapping_layers
     ).to(device)
-    disc = Discriminator(resolution=resolution).to(device)
+    disc = Discriminator(resolution=resolution, n_features=resolution).to(device)
 
     gen_opt = Adam([
         {'params': gen.synthesis.parameters(), 'lr': synthesis_lr, 'betas': synthesis_betas},
