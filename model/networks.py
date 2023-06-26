@@ -371,7 +371,7 @@ class MiniBatchStdDev(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, resolution: int, n_features: int = 32, max_features: int = 512) -> None:
+    def __init__(self, resolution: int, n_features: int = 64, max_features: int = 512) -> None:
         super().__init__()
         self.from_rgb = nn.Sequential(
             EqualizedConv2D(3, n_features, kernel_size=1),
