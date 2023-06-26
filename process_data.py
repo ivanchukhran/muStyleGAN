@@ -6,26 +6,15 @@ import torchvision.transforms
 from PIL import Image
 
 
-def exists(path):
-    return os.path.exists(path)
-
-
-def create_dir(path):
-    if not exists(path):
+def create_dir_or_ignore(path: str) -> None:
+    if not os.path.exists(path):
         os.makedirs(path)
     else:
-        print(f"Path {path} already exists!")
+        print(f"Directory {path} already exists.")
 
 
-def similar_dir_exists(path: str, dir_name: str):
-    for item in os.listdir(path):
-        if dir_name in item:
-            return True
-    return False
-
-
-def list_dir(path):
-    return os.listdir(path)
+def filter_by_dirname(path, dir_name) -> list[str]:
+    return [folder for folder in os.listdir(path) if dir_name in folder]
 
 
 def default_transformation(crop_size: int | Tuple[int, int] = 32,
@@ -44,7 +33,10 @@ class Dataset(torch.utils.data.Dataset):
         self.root_dir = root_dir
         self.transform = default_transformation(transformation=transform)
 
-        self.images = list_dir(root_dir)
+        if os.path.exists(root_dir):
+            self.images = os.listdir(root_dir)
+        else:
+            raise FileNotFoundError(f"Directory {root_dir} does not exist.")
 
     def __getitem__(self, item):
         with Image.open(os.path.join(self.root_dir, self.images[item])) as img:
