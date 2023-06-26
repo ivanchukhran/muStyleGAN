@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -24,7 +26,7 @@ def read_settings(path: str) -> dict:
     return settings
 
 
-def show_tensor_images(image_tensor, num_images=16):
+def show_tensor_images(image_tensor, num_images=16, save_path: Optional[str] = None):
     """
     Function for visualizing images: Given a tensor of images, number of images,
     size per image, and images per row, plots and prints the images in an uniform grid.
@@ -35,6 +37,9 @@ def show_tensor_images(image_tensor, num_images=16):
     plt.imshow(image_grid.permute(1, 2, 0).squeeze())
     plt.axis('off')
     plt.show()
+    if save_path:
+        plt.savefig(save_path)
+    plt.close()
 
 
 def get_noise(shape: tuple, device='cuda') -> torch.Tensor:
