@@ -17,7 +17,7 @@ def filter_by_dirname(path, dir_name) -> list[str]:
     return [folder for folder in os.listdir(path) if dir_name in folder]
 
 
-def default_transformation(crop_size: int | Tuple[int, int] = 32,
+def default_transformation(crop_size: int | Tuple[int, int],
                            transformation: Optional[torchvision.transforms.Compose] = None):
     if not transformation:
         transformation = torchvision.transforms.Compose([
@@ -29,9 +29,9 @@ def default_transformation(crop_size: int | Tuple[int, int] = 32,
 
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir: str, transform: Optional[torchvision.transforms.Compose] = None):
+    def __init__(self, root_dir: str, crop_size: int = 32, transform: Optional[torchvision.transforms.Compose] = None):
         self.root_dir = root_dir
-        self.transform = default_transformation(transformation=transform)
+        self.transform = default_transformation(crop_size, transformation=transform)
 
         if os.path.exists(root_dir):
             self.images = os.listdir(root_dir)
