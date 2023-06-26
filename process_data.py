@@ -17,6 +17,13 @@ def create_dir(path):
         print(f"Path {path} already exists!")
 
 
+def similar_dir_exists(path: str, dir_name: str):
+    for item in os.listdir(path):
+        if dir_name in item:
+            return True
+    return False
+
+
 def list_dir(path):
     return os.listdir(path)
 
