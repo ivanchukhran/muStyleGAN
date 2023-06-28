@@ -178,11 +178,7 @@ def train(
             else:
                 print(f"Directory {folder} already exists.")
 
-    match mode:
-        case "local":
-            dataset_path = "data/landscapes"
-        case _:
-            raise ValueError(f"Unknown mode: {mode}")
+    dataset_path = "data/landscapes"
 
     dataset = Dataset(dataset_path, crop_size=resolution)
 
