@@ -223,11 +223,5 @@ def train(
     )
 
 
-def main() -> None:
-    epochs = 100_000
-    torch.cuda.set_per_process_memory_fraction(0.5)
-    train(epochs, dry_run=False)
-
-
 if __name__ == '__main__':
     train()
