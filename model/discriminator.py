@@ -5,32 +5,6 @@ from torch import nn
 from model.components import EqualizedLinear, EqualizedConv2D, Downsample
 
 
-class AdaIN(nn.Module):
-    def __init__(self, channels, w_dim) -> None:
-        super().__init__()
-        self.norm = nn.InstanceNorm2d(channels)
-        self.scale = nn.Linear(w_dim, channels)
-        self.shift = nn.Linear(w_dim, channels)
-
-    def forward(self, image, w) -> torch.Tensor:
-        normalized_image = self.instance_norm(image)
-        style_scale = self.scale(w)[:, :, None, None]
-        style_shift = self.shift(w)[:, :, None, None]
-        return style_scale * normalized_image + style_shift
-
-    @property
-    def scale_transform(self) -> nn.Linear:
-        return self.scale
-
-    @property
-    def shift_transform(self) -> nn.Linear:
-        return self.shift
-
-    @property
-    def get_self(self) -> "AdaIN":
-        return self
-
-
 class DiscriminatorBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
