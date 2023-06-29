@@ -5,11 +5,15 @@ from torch.optim import Optimizer, Adam
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from model.networks import Generator, Discriminator
-from model.utils import *
+from model.generator import Generator
+from model.discriminator import Discriminator
+
 from dataset import *
+
+from util.files import *
 from util.evaluation import *
 from util.visualization import *
+
 from matplotlib import pyplot as plt
 
 PLOT_PATH = "plots"
