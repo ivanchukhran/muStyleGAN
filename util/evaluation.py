@@ -1,45 +1,6 @@
-from typing import Optional
-
 import torch
-from torch import nn
-from torch.nn import functional as F
-
+import torch.nn.functional as F
 from scipy.stats import truncnorm
-from torchvision.utils import make_grid
-import matplotlib.pyplot as plt
-
-import json
-
-
-def read_settings(path: str) -> dict:
-    """
-    Read the settings from the given path.
-    :param path: The path to the settings file.
-    :return: settings: dict - The settings.
-    """
-    try:
-        with open(path, 'r') as f:
-            settings = json.load(f)
-    except Exception as e:
-        print(f"Error reading settings file: {e}")
-        settings = {}
-    return settings
-
-
-def show_tensor_images(image_tensor, num_images=16, save_path: Optional[str] = None):
-    """
-    Function for visualizing images: Given a tensor of images, number of images,
-    size per image, and images per row, plots and prints the images in an uniform grid.
-    """
-    image_tensor = (image_tensor + 1) / 2
-    image_unflatten = image_tensor.detach().cpu().clamp_(0, 1)
-    image_grid = make_grid(image_unflatten[:num_images], padding=0)
-    plt.imshow(image_grid.permute(1, 2, 0).squeeze())
-    plt.axis('off')
-    plt.show()
-    if save_path:
-        plt.savefig(save_path)
-    plt.close()
 
 
 def get_noise(shape: tuple, device='cuda') -> torch.Tensor:
@@ -91,8 +52,10 @@ def gradient_penalty(x: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
     and penalize the mean quadratic distance of each magnitude to 1.
     Parameters:
         gradient: the gradient of the critic's scores, with respect to the mixed image
+        :param x: gradient input tensor
+        :param f: gradient output tensor
     Returns:
-        penalty: the gradient penalty
+        penalty: the gradient penalty of the given tensors
     """
     batch_size = x.shape[0]
     gradients, *_ = torch.autograd.grad(outputs=f,
