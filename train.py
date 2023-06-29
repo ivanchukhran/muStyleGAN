@@ -7,7 +7,10 @@ from tqdm.auto import tqdm
 
 from model.networks import Generator, Discriminator
 from model.utils import *
-from process_data import *
+from dataset import *
+from util.evaluation import *
+from util.visualization import *
+from matplotlib import pyplot as plt
 
 PLOT_PATH = "plots"
 SAMPLE_PATH = "samples"

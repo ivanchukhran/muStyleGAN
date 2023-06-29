@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from model.utils import get_noise
+from util.evaluation import get_noise
 
 
 class NoiseInjection(nn.Module):

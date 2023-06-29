@@ -6,17 +6,6 @@ import torchvision.transforms
 from PIL import Image
 
 
-def create_dir_or_ignore(path: str) -> None:
-    if not os.path.exists(path):
-        os.makedirs(path)
-    else:
-        print(f"Directory {path} already exists.")
-
-
-def filter_by_dirname(path, dir_name) -> list[str]:
-    return [folder for folder in os.listdir(path) if dir_name in folder]
-
-
 def default_transformation(crop_size: int | Tuple[int, int],
                            transformation: Optional[torchvision.transforms.Compose] = None):
     if not transformation:
