@@ -95,7 +95,7 @@ def visualize(
         generator_losses: list,
         critic_losses: list,
         fake: torch.Tensor,
-        real: torch.Tensor,
+       real: torch.Tensor,
         n_last: int, epoch: int,
         cur_step: int,
         save: bool = False

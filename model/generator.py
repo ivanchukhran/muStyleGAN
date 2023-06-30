@@ -57,9 +57,6 @@ class Generator(nn.Module):
         return self.forward(z)
 
 
-
-
-
 class SynthesisLayer(nn.Module):
     def __init__(self, w_dim: int, in_channels: int, out_channels: int, activation: str = "leaky") -> None:
         super().__init__()
