@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import PIL
 import numpy as np
 import torch
