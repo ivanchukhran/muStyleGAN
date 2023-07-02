@@ -1,3 +1,5 @@
+import os.path
+
 import click
 import datetime
 
@@ -168,6 +170,8 @@ def train(
     n_epochs = num_epochs
 
     formatted_date = datetime.datetime.now().strftime("%d%m%y")
+    if not os.path.exists(WEIGHTS_PATH):
+        create_dir_or_ignore(WEIGHTS_PATH)
     dir_version = f"v{len(filter_by_dirname(WEIGHTS_PATH, formatted_date)) + 1}"
 
     save_path = os.path.join(WEIGHTS_PATH, formatted_date, dir_version)
