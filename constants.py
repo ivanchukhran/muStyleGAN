@@ -4,3 +4,8 @@ DATA_PATH: str = "data/landscapes"
 PLOT_PATH: str = "plots"
 SAMPLE_PATH: str = "samples"
 WEIGHTS_PATH: str = "weights"
+
+# Running modes
+LOCAL: str = "local"
+MULTI_GPU: str = "mgpu"
+MULTI_NODE: str = "mnode"
