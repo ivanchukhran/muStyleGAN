@@ -49,7 +49,7 @@ class PathLengthPenalty(nn.Module):
         return loss
 
 
-def get_noise(shape: tuple, device='cuda') -> torch.Tensor:
+def get_noise(shape: tuple, device: str | torch.device = 'cuda') -> torch.Tensor:
     """
     Generate a noise tensor with the given channels.
     :param shape: The shape of the noise tensor.
