@@ -2,7 +2,8 @@ import click
 import datetime
 
 from torch.optim import Optimizer, Adam
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm.auto import tqdm
 
 from model.generator import Generator
@@ -13,12 +14,10 @@ from dataset import *
 from util.files import *
 from util.evaluation import *
 from util.visualization import *
+from constants import *
 
 from matplotlib import pyplot as plt
 
-PLOT_PATH = "plots"
-SAMPLE_PATH = "samples"
-WEIGHTS_PATH = "weights"
 
 def train_loop(
         generator: Generator,
@@ -95,7 +94,7 @@ def visualize(
         generator_losses: list,
         critic_losses: list,
         fake: torch.Tensor,
-       real: torch.Tensor,
+        real: torch.Tensor,
         n_last: int, epoch: int,
         cur_step: int,
         save: bool = False
@@ -130,7 +129,10 @@ def visualize(
                                                     '100_000 is the default.')
 @click.option('--mode', default='local', help='Mode to run the training in.'
                                               '`local` is the default.'
-                                              '`local` will run the training locally.')
+                                              '`local` will run the training locally. '
+                                              '`mgpu` will run the training on multiple GPUs. '
+                                              '`mnode` will run the training on multiple nodes.'
+              )
 @click.option('--resolution', default=32, help='Resolution of the images to train on. 32 is the default.')
 @click.option('--display-step', default=506, help='Number of steps to display the images for. The 506 is the default.'
                                                   'If none is given, it will not display the images.')
@@ -164,7 +166,6 @@ def train(
     c_lambda = 10
     crit_repeats = 5
     n_epochs = num_epochs
-    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     formatted_date = datetime.datetime.now().strftime("%d%m%y")
     dir_version = f"v{len(filter_by_dirname(WEIGHTS_PATH, formatted_date)) + 1}"
@@ -185,24 +186,47 @@ def train(
             else:
                 print(f"Directory {folder} already exists.")
 
-    dataset_path = "data/landscapes"
+    DATA_PATH = "data/landscapes"
 
-    dataset = Dataset(dataset_path, crop_size=resolution)
+    dataset = Dataset(DATA_PATH, crop_size=resolution)
 
-    dataloader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=2
-    )
-    gen = Generator(
-        z_dim=z_dim,
-        w_dim=w_dim,
-        image_resolution=resolution,
-        n_mapping_layers=n_mapping_layers
-    ).to(device)
-    disc = Discriminator(resolution=resolution, n_features=resolution).to(device)
+    gen = Generator(z_dim=z_dim, w_dim=w_dim, image_resolution=resolution, n_mapping_layers=n_mapping_layers)
+    disc = Discriminator(resolution=resolution, n_features=resolution)
 
+    match mode:
+        case "local":
+            dataloader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=2
+            )
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            gen = gen.to(device)
+            disc = disc.to(device)
+        case "mgpu":
+            # FIXME: This is might not work
+            dataloader = DataLoader(
+                dataset,
+                batch_size=batch_size * torch.cuda.device_count(),
+                shuffle=True,
+                num_workers=2
+            )
+            gen = DDP(gen)
+            disc = DDP(disc)
+        case "mnode":
+            # FIXME: This is might not work
+            sampler = DistributedSampler(dataset)
+            dataloader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                sampler=sampler,
+                num_workers=2
+            )
+            gen = DDP(gen)
+            disc = DDP(disc)
+        case _:
+            raise ValueError(f"Mode {mode} is not supported.")
     gen_opt = Adam([
         {'params': gen.synthesis.parameters(), 'lr': synthesis_lr, 'betas': synthesis_betas},
         {'params': gen.mapping.parameters(), 'lr': mapping_lr, 'betas': mapping_betas}
