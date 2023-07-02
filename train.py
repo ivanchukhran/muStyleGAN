@@ -1,24 +1,21 @@
+import datetime
 import os.path
 
 import click
-import datetime
-
+from matplotlib import pyplot as plt
 from torch.optim import Optimizer, Adam
 from torch.utils.data import DataLoader, DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.multiprocessing as mp
 from tqdm.auto import tqdm
 
-from model.generator import Generator
-from model.discriminator import Discriminator
-
-from dataset import *
-
-from util.files import *
-from util.evaluation import *
-from util.visualization import *
 from constants import *
-
-from matplotlib import pyplot as plt
+from dataset import *
+from distributed import wrap_to_ddp, setup_ddp, destroy_ddp
+from model.discriminator import Discriminator
+from model.generator import Generator
+from util.evaluation import *
+from util.files import *
+from util.visualization import *
 
 
 def train_loop(
@@ -32,10 +29,11 @@ def train_loop(
         crit_repeats: int = 1,
         n_epochs: int = 1000,
         c_lambda: float = 10,  # need to be changed
-        device: str = "cuda",
+        device: int | str | torch.device = 0,  # shortcut for cuda:0
         display_step: Optional[int] = None,
         lazy_gradient_penalty: int = 4,
-        save_graphics: bool = False
+        save_graphics: bool = False,
+        mode: str = LOCAL
 ) -> None:
     cur_step = 0
 
@@ -83,8 +81,12 @@ def train_loop(
             generator_losses += [gen_loss.item()]
 
             if cur_step % save_step == 0 and cur_step > 0:
-                torch.save(generator.state_dict(), f"{WEIGHTS_PATH}/generator_{epoch}.pth")
-                torch.save(discriminator.state_dict(), f"{WEIGHTS_PATH}/discriminator_{epoch}.pth")
+                if mode == LOCAL:
+                    torch.save(generator.state_dict(), f"{WEIGHTS_PATH}/generator_{epoch}.pth")
+                    torch.save(discriminator.state_dict(), f"{WEIGHTS_PATH}/discriminator_{epoch}.pth")
+                else:
+                    torch.save(generator.module.state_dict(), f"{WEIGHTS_PATH}/generator_{epoch}.pth")
+                    torch.save(discriminator.module.state_dict(), f"{WEIGHTS_PATH}/discriminator_{epoch}.pth")
 
             if display_step:
                 if cur_step % display_step == 0 and cur_step > 0:
@@ -133,25 +135,22 @@ def visualize(
                                               '`local` is the default.'
                                               '`local` will run the training locally. '
                                               '`mgpu` will run the training on multiple GPUs. '
-                                              '`mnode` will run the training on multiple nodes.'
-              )
+                                              '`mnode` will run the training on multiple nodes.')
 @click.option('--resolution', default=32, help='Resolution of the images to train on. 32 is the default.')
 @click.option('--display-step', default=506, help='Number of steps to display the images for. The 506 is the default.'
                                                   'If none is given, it will not display the images.')
 @click.option('--save-step', default=506, help='Number of steps to save the images for. 506 is the default.')
 @click.option('--batch-size', default=8, help='Batch size to use for training. 8 is the default.')
-@click.option('--dry-run', default=False, help='Whether to do a dry run of the training. False is the default.')
 @click.option('--save-graphics', default=False, help='Whether to save the graphics. False is the default.')
-def train(
-        num_epochs: int,
-        mode: str,
-        resolution: int,
-        display_step: int,
-        save_step: int,
-        batch_size: int,
-        dry_run: bool,
-        save_graphics: bool
-) -> None:
+@click.option('--rank', default=0, help='Rank of the current node. 0 is the default server node.')
+def train(num_epochs: int,
+          mode: str,
+          rank: int,
+          resolution: int,
+          display_step: int,
+          save_step: int,
+          batch_size: int,
+          save_graphics: bool) -> None:
     z_dim = 128
     w_dim = 256
     n_mapping_layers = 5
@@ -190,72 +189,54 @@ def train(
             else:
                 print(f"Directory {folder} already exists.")
 
-    DATA_PATH = "data/landscapes"
-
     dataset = Dataset(DATA_PATH, crop_size=resolution)
 
     gen = Generator(z_dim=z_dim, w_dim=w_dim, image_resolution=resolution, n_mapping_layers=n_mapping_layers)
     disc = Discriminator(resolution=resolution, n_features=resolution)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2)
 
-    match mode:
-        case "local":
-            dataloader = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                shuffle=True,
-                num_workers=2
-            )
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            gen = gen.to(device)
-            disc = disc.to(device)
-        case "mgpu":
-            # FIXME: This is might not work
-            dataloader = DataLoader(
-                dataset,
-                batch_size=batch_size * torch.cuda.device_count(),
-                shuffle=True,
-                num_workers=2
-            )
-            gen = DDP(gen)
-            disc = DDP(disc)
-        case "mnode":
-            # FIXME: This is might not work
-            sampler = DistributedSampler(dataset)
-            dataloader = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                sampler=sampler,
-                num_workers=2
-            )
-            gen = DDP(gen)
-            disc = DDP(disc)
-        case _:
-            raise ValueError(f"Mode {mode} is not supported.")
-    gen_opt = Adam([
-        {'params': gen.synthesis.parameters(), 'lr': synthesis_lr, 'betas': synthesis_betas},
-        {'params': gen.mapping.parameters(), 'lr': mapping_lr, 'betas': mapping_betas}
-    ])
-    disc_opt = Adam(disc.parameters(), lr=discriminator_lr, betas=discriminator_betas)
+    if mode == LOCAL:
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        gen = gen.to(device)
+        disc = disc.to(device)
+        gen_opt = Adam([
+            {'params': gen.synthesis.parameters(), 'lr': synthesis_lr, 'betas': synthesis_betas},
+            {'params': gen.mapping.parameters(), 'lr': mapping_lr, 'betas': mapping_betas}
+        ])
+        disc_opt = Adam(disc.parameters(), lr=discriminator_lr, betas=discriminator_betas)
+        train_loop(
+            generator=gen, discriminator=disc,
+            dataloader=dataloader,
+            gen_optimizer=gen_opt,
+            disc_optimizer=disc_opt,
+            z_dim=z_dim,
+            crit_repeats=crit_repeats,
+            n_epochs=n_epochs,
+            c_lambda=c_lambda,
+            device=device,
+            save_step=save_step,
+            display_step=display_step, )
+    elif mode in (MULTI_GPU, MULTI_NODE):
+        world_size = torch.cuda.device_count()
+        setup_ddp(rank, world_size)
+        device = f"cuda:{rank}"
+        dataloader.sampler = DistributedSampler(dataset, rank=rank)
+        gen, disc = wrap_to_ddp([gen, disc], rank)
+        gen_opt = Adam([
+            {'params': gen.synthesis.parameters(), 'lr': synthesis_lr, 'betas': synthesis_betas},
+            {'params': gen.mapping.parameters(), 'lr': mapping_lr, 'betas': mapping_betas}
+        ])
+        disc_opt = Adam(disc.parameters(), lr=discriminator_lr, betas=discriminator_betas)
+        mp.spawn(fn=train_loop, args=(gen, disc, dataloader, gen_opt, disc_opt, z_dim, crit_repeats,
+                                      n_epochs, c_lambda, device, save_step, display_step, mode)
+                 , nprocs=world_size)
+        destroy_ddp()
+    else:
+        raise ValueError(f"Mode {mode} is not supported.")
 
-    if dry_run:
-        noise = get_noise((batch_size, z_dim), device=device)
-        fake = gen(noise)
-        show_tensor_images(fake, num_images=batch_size)
-        return
-
-    train_loop(
-        generator=gen, discriminator=disc,
-        dataloader=dataloader,
-        gen_optimizer=gen_opt,
-        disc_optimizer=disc_opt,
-        z_dim=z_dim,
-        crit_repeats=crit_repeats,
-        n_epochs=n_epochs,
-        c_lambda=c_lambda,
-        device=device,
-        save_step=save_step,
-        display_step=display_step,
-    )
+    if mode in (MULTI_GPU, MULTI_NODE):
+        pass
 
 
 if __name__ == '__main__':
