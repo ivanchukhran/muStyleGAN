@@ -40,6 +40,11 @@ def train_loop(
     generator_losses = []
     critic_losses = []
 
+    if not os.path.exists(LOSS_PATH):
+        dump_json(LOSS_PATH, {"generator": [], "discriminator": []})
+
+    losses = fetch_json(LOSS_PATH)
+
     for epoch in range(n_epochs):
         print(f"Epoch {epoch}")
         for real in tqdm(dataloader):
@@ -93,6 +98,9 @@ def train_loop(
                     visualize(generator_losses, critic_losses, fake, real, display_step, epoch, cur_step, save_graphics)
             cur_step += 1
 
+        losses.get("generator").append(generator_losses)
+        losses.get("discriminator").append(critic_losses)
+        dump_json(LOSS_PATH, losses)
 
 def visualize(
         generator_losses: list,
