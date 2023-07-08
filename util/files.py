@@ -2,6 +2,23 @@ import json
 import os
 
 
+def fetch_json(path: str) -> dict:
+    try:
+        with open(path, 'r') as f:
+            file = json.load(f)
+    except Exception as e:
+        print(f"Error reading file: {e}")
+    return file
+
+
+def dump_json(path: str, data: dict) -> None:
+    try:
+        with open(path, 'w') as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"Error writing file: {e}")
+
+
 def read_settings(path: str) -> dict:
     """
     Read the settings from the given path.
