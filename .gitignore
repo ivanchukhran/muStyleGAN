@@ -7,3 +7,6 @@ weights/
 data/
 plots/
 samples/
+
+local_secrets.py
+losses.json
