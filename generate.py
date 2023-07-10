@@ -11,6 +11,10 @@ from constants import SETTINGS_PATH
 SETTINGS = fetch_json(SETTINGS_PATH)
 
 
+def supported_generators() -> list[str]:
+    return list(SETTINGS.keys())
+
+
 def to_image(tensor: torch.Tensor) -> PIL.Image.Image:
     return transforms.ToPILImage()(tensor.cpu())
 
