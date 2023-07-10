@@ -6,6 +6,8 @@ SAMPLE_PATH: str = "samples"
 WEIGHTS_PATH: str = "weights"
 LOSS_PATH: str = "losses.json"
 
+SETTINGS_PATH: str = "settings.json"
+
 # Running modes
 LOCAL: str = "local"
 MULTI_GPU: str = "mgpu"
