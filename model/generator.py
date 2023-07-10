@@ -4,8 +4,6 @@ import PIL
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
-
 from PIL import Image
 
 from model.components import EqualizedLinear, ModulatedConv2D, NoiseInjection, ToRGB, Upsample
@@ -137,13 +135,21 @@ class SynthesisNetwork(nn.Module):
 class MappingNetwork(nn.Module):
     def __init__(self, z_dim: int, w_dim: int, n_layers: int, relu: str = "leaky", slope: float = 0.2) -> None:
         super().__init__()
+        match relu:
+            case "leaky":
+                activation = nn.LeakyReLU(negative_slope=slope)
+            case "relu":
+                activation = nn.ReLU()
+            case _:
+                print(f"Activation {relu} not supported. Using LeakyReLU instead.")
+                activation = nn.LeakyReLU(negative_slope=slope)
         layers = []
         for i in range(n_layers):
             if i == 0:
                 layers.append(nn.Linear(z_dim, w_dim))
             else:
                 layers.append(nn.Linear(w_dim, w_dim))
-            layers.append(nn.LeakyReLU(negative_slope=slope))
+            layers.append(activation)
         self.map = nn.Sequential(*layers)
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
@@ -160,6 +166,8 @@ class MappingNetwork(nn.Module):
             match module:
                 case nn.Linear():
                     names.append(f"Linear({module.in_features}, {module.out_features})")
+                case nn.ReLU():
+                    names.append(f"ReLU({module.negative_slope})")
                 case nn.LeakyReLU():
                     names.append(f"LeakyReLU({module.negative_slope})")
         return '\n'.join(names)
