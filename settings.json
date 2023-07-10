@@ -1,0 +1,9 @@
+{
+  "stylegan2-landscape-32": {
+    "z_dim": 128,
+    "w_dim": 256,
+    "n_mapping_layers": 5,
+    "image_resolution": 32,
+    "weights_root": "weights/stylegan2-landscape-32.pth"
+  }
+}
