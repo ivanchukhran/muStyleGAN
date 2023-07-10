@@ -22,7 +22,6 @@ def generate(num_images: int, generator_type: str = "stylegan2-landscape-32") ->
     device = "cuda" if torch.cuda.is_available() else "cpu"
     generator = Generator(**settings).from_pretrained(settings.get("weights_root")).to(device)
     z = get_noise((num_images, settings.get("z_dim")), device=device)
-    print(f"generated nosie: {z.shape}")
     generated_tensor = generator(z)
     if num_images == 1:
         return to_image(torch.squeeze(generated_tensor))
