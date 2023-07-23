@@ -4,7 +4,6 @@ DATA_PATH: str = "data/landscapes"
 PLOT_PATH: str = "plots"
 SAMPLE_PATH: str = "samples"
 WEIGHTS_PATH: str = "weights"
-LOSS_PATH: str = "losses.json"
 
 SETTINGS_PATH: str = "settings.json"
 
