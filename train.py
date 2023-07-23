@@ -3,14 +3,16 @@ import os.path
 
 import click
 from matplotlib import pyplot as plt
+from torch.distributed import init_process_group
 from torch.optim import Optimizer, Adam
 from torch.utils.data import DataLoader, DistributedSampler
 import torch.multiprocessing as mp
 from tqdm.auto import tqdm
 
+import local_secrets
 from constants import *
 from dataset import *
-from distributed import wrap_to_ddp, setup_ddp, destroy_ddp
+from distributed import wrap_to_ddp, setup_ddp, destroy_ddp, setup_device
 from model.discriminator import Discriminator
 from model.generator import Generator
 from util.evaluation import *
@@ -102,6 +104,7 @@ def train_loop(
         losses.get("discriminator").append(critic_losses)
         dump_json(LOSS_PATH, losses)
 
+
 def visualize(
         generator_losses: list,
         critic_losses: list,
@@ -137,40 +140,26 @@ def visualize(
 
 
 @click.command()
-@click.option('--num_epochs', default=100_000, help='Number of epochs to train the model for. '
-                                                    '100_000 is the default.')
-@click.option('--mode', default='local', help='Mode to run the training in.'
-                                              '`local` is the default.'
-                                              '`local` will run the training locally. '
-                                              '`mgpu` will run the training on multiple GPUs. '
-                                              '`mnode` will run the training on multiple nodes.')
-@click.option('--resolution', default=32, help='Resolution of the images to train on. 32 is the default.')
+@click.option('epochs', '--num_epochs', default=100_000, help='number of epochs to train the model for.')
+@click.option('-gpus', '--num_gpus', default=1, help='number of GPUs to train the model on.')
+@click.option('-nodes', '--num_nodes', default=1, help='number of nodes to train the model on.')
+@click.option('-r' '--rank', default=0, help='rank of the current node.')
+@click.option('--resolution', default=32, help='Resolution of the images to train on.')
 @click.option('--display-step', default=506, help='Number of steps to display the images for. The 506 is the default.'
                                                   'If none is given, it will not display the images.')
 @click.option('--save-step', default=506, help='Number of steps to save the images for. 506 is the default.')
 @click.option('--batch-size', default=8, help='Batch size to use for training. 8 is the default.')
 @click.option('--save-graphics', default=False, help='Whether to save the graphics. False is the default.')
-@click.option('--rank', default=0, help='Rank of the current node. 0 is the default server node.')
 def train(num_epochs: int,
-          mode: str,
+          gpus: int,
+          nodes: int,
           rank: int,
           resolution: int,
           display_step: int,
           save_step: int,
           batch_size: int,
           save_graphics: bool) -> None:
-    z_dim = 128
-    w_dim = 256
-    n_mapping_layers = 5
-
-    synthesis_lr = 2e-5
-    synthesis_betas = (0.5, 0.9)
-
-    mapping_lr = 2e-5
-    mapping_betas = (0.5, 0.9)
-
-    discriminator_lr = 2e-5
-    discriminator_betas = (0.5, 0.9)
+    config = fetch_json("settings.json")
 
     c_lambda = 10
     crit_repeats = 5
@@ -199,52 +188,49 @@ def train(num_epochs: int,
 
     dataset = Dataset(DATA_PATH, crop_size=resolution)
 
-    gen = Generator(z_dim=z_dim, w_dim=w_dim, image_resolution=resolution, n_mapping_layers=n_mapping_layers)
+    gen = Generator(**config)
     disc = Discriminator(resolution=resolution, n_features=resolution)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2)
 
-    if mode == LOCAL:
+    optimizers_config = config["optimizers"]
+
+    world_size = gpus * nodes
+    batch_size = batch_size * world_size
+
+    if world_size == 1:
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2)
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = setup_device(0)
         gen = gen.to(device)
         disc = disc.to(device)
         gen_opt = Adam([
-            {'params': gen.synthesis.parameters(), 'lr': synthesis_lr, 'betas': synthesis_betas},
-            {'params': gen.mapping.parameters(), 'lr': mapping_lr, 'betas': mapping_betas}
+            {'params': gen.synthesis.parameters(), **optimizers_config['synthesis']},
+            {'params': gen.mapping.parameters(), **optimizers_config['mapping']}
         ])
-        disc_opt = Adam(disc.parameters(), lr=discriminator_lr, betas=discriminator_betas)
-        train_loop(
-            generator=gen, discriminator=disc,
-            dataloader=dataloader,
-            gen_optimizer=gen_opt,
-            disc_optimizer=disc_opt,
-            z_dim=z_dim,
-            crit_repeats=crit_repeats,
-            n_epochs=n_epochs,
-            c_lambda=c_lambda,
-            device=device,
-            save_step=save_step,
-            display_step=display_step, )
-    elif mode in (MULTI_GPU, MULTI_NODE):
-        world_size = torch.cuda.device_count()
-        setup_ddp(rank, world_size)
-        device = f"cuda:{rank}"
-        dataloader.sampler = DistributedSampler(dataset, rank=rank)
-        gen, disc = wrap_to_ddp([gen, disc], rank)
+        disc_opt = Adam(disc.parameters(), **optimizers_config["discriminator"])
+        train_loop(generator=gen, discriminator=disc, dataloader=dataloader, gen_optimizer=gen_opt, disc_optimizer=disc_opt,
+            z_dim=config["z_dim"], crit_repeats=crit_repeats, n_epochs=n_epochs, c_lambda=c_lambda, device=device,
+            save_step=save_step, display_step=display_step)
+    elif world_size > 1:
+        #########################################################
+        # SETUP DDP
+        #########################################################
+        os.environ['MASTER_ADDR'] = local_secrets.MASTER_ADDR
+        os.environ['MASTER_PORT'] = '12355'
+        init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
+        device = setup_device(rank)
+        sampler = DistributedSampler(dataset, rank=rank, num_replicas=world_size)
+        dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler,
+                                shuffle=False, num_workers=2, pin_memory=True)
+        gen = gen.to(device)
+        disc = disc.to(device)
         gen_opt = Adam([
-            {'params': gen.synthesis.parameters(), 'lr': synthesis_lr, 'betas': synthesis_betas},
-            {'params': gen.mapping.parameters(), 'lr': mapping_lr, 'betas': mapping_betas}
+            {'params': gen.synthesis.parameters(), **optimizers_config['synthesis']},
+            {'params': gen.mapping.parameters(), **optimizers_config['mapping']}
         ])
-        disc_opt = Adam(disc.parameters(), lr=discriminator_lr, betas=discriminator_betas)
-        mp.spawn(fn=train_loop, args=(gen, disc, dataloader, gen_opt, disc_opt, z_dim, crit_repeats,
-                                      n_epochs, c_lambda, device, save_step, display_step, mode)
-                 , nprocs=world_size)
-        destroy_ddp()
-    else:
-        raise ValueError(f"Mode {mode} is not supported.")
+        disc_opt = Adam(disc.parameters(), **optimizers_config["discriminator"])
 
-    if mode in (MULTI_GPU, MULTI_NODE):
-        pass
+        mp.spawn(fn=train_loop, args=(gen, disc, dataloader, gen_opt, disc_opt, config["z_dim"], crit_repeats,
+                                      n_epochs, c_lambda, device, save_step, display_step), nprocs=gpus)
 
 
 if __name__ == '__main__':
